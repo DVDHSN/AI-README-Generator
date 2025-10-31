@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { generateReadme, editReadmeSelection } from '../services/geminiService';
+import { getRepoContent } from '../services/githubService';
 import { GithubIcon } from './icons/GithubIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
@@ -11,6 +12,7 @@ const ReadmeGenerator: React.FC = () => {
   const [isThinkingMode, setIsThinkingMode] = useState(false);
   const [generatedReadme, setGeneratedReadme] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -42,13 +44,19 @@ const ReadmeGenerator: React.FC = () => {
     setIsLoading(true);
     setGeneratedReadme('');
     setSelection(null);
+    
     try {
-      const readme = await generateReadme(repoUrl, isThinkingMode);
+      setLoadingMessage('Analyzing repository files...');
+      const repoContent = await getRepoContent(repoUrl);
+      
+      setLoadingMessage('Generating README with Gemini...');
+      const readme = await generateReadme(repoUrl, repoContent, isThinkingMode);
       setGeneratedReadme(readme);
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
     } finally {
       setIsLoading(false);
+      setLoadingMessage('');
     }
   }, [repoUrl, isThinkingMode]);
 
@@ -245,9 +253,11 @@ const ReadmeGenerator: React.FC = () => {
       <div className="flex-grow bg-slate-800 rounded-xl border border-slate-700 shadow-lg flex flex-col min-h-[400px]">
         {isLoading ? (
           <div className="flex-grow flex flex-col items-center justify-center text-slate-400">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-400"></div>
-            <p className="mt-4 text-lg">Gemini is thinking...</p>
-            <p className="text-sm">This might take a moment, especially in Thinking Mode.</p>
+            <SpinnerIcon className="h-12 w-12 text-sky-400" />
+            <p className="mt-4 text-lg">{loadingMessage}</p>
+            {loadingMessage.includes('Gemini') && (
+              <p className="text-sm">This might take a moment, especially in Thinking Mode.</p>
+            )}
           </div>
         ) : generatedReadme ? (
           <div className="relative h-full flex-grow">

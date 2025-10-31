@@ -1,5 +1,6 @@
 // Fix: Import Chat type for the new getChatInstance function.
 import { GoogleGenAI, Chat } from "@google/genai";
+import { getRepoContent } from "./githubService";
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable is not set.");
@@ -7,28 +8,34 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const generateReadme = async (repoUrl: string, isThinkingMode: boolean): Promise<string> => {
+export const generateReadme = async (repoUrl: string, repoContent: string, isThinkingMode: boolean): Promise<string> => {
   const modelName = 'gemini-2.5-pro';
   
   const prompt = `
     You are an expert software engineer and technical writer tasked with creating a README.md file for a GitHub repository.
-    Based on the provided GitHub repository URL, infer the project's purpose, technology stack, file structure, and key features.
+    You have been provided with the file contents of the repository. Your task is to analyze this code to understand the project's purpose, technology stack, file structure, and key features.
     
-    Generate a comprehensive, well-structured, and high-quality README.md file in Markdown format.
+    Based on your analysis of the code, generate a comprehensive, well-structured, and high-quality README.md file in Markdown format.
     
     The README should include the following sections:
     - **Project Title**: An engaging title for the project.
-    - **Description**: A detailed explanation of what the project does.
-    - **Key Features**: A bulleted list of the main functionalities.
-    - **Tech Stack**: A list of technologies, frameworks, and libraries used.
-    - **Installation & Setup**: A step-by-step guide on how to get the project running locally.
-    - **Usage**: Instructions or examples on how to use the project.
-    - **Contributing**: Guidelines for potential contributors.
-    - **License**: A mention of the project's license (e.g., MIT).
+    - **Description**: A detailed explanation of what the project does, based on the code.
+    - **Key Features**: A bulleted list of the main functionalities, inferred from the source code.
+    - **Tech Stack**: A list of technologies, frameworks, and libraries used. Use package manager files (like package.json, requirements.txt) and code imports to determine this accurately.
+    - **Installation & Setup**: A step-by-step guide on how to get the project running locally. Infer commands from files like package.json scripts.
+    - **Usage**: Instructions or examples on how to use the project. If it's a library, show code examples. If it's an app, explain how to run it.
+    - **File Structure**: A brief overview of the key directories and files can be helpful.
+    - **Contributing**: Standard guidelines for potential contributors.
+    - **License**: A mention of the project's license (e.g., MIT). Look for a LICENSE file if its content is provided.
     
-    Here is the repository URL: ${repoUrl}
+    The user provided this URL for context: ${repoUrl}
     
-    Please provide only the raw Markdown content for the README file.
+    Here are the contents of the most relevant repository files:
+    ---
+    ${repoContent}
+    ---
+    
+    Please provide only the raw Markdown content for the README file. Do not include any introductory phrases like "Here is the README file".
   `;
 
   try {
@@ -44,7 +51,7 @@ export const generateReadme = async (repoUrl: string, isThinkingMode: boolean): 
     return response.text;
   } catch (error) {
     console.error("Error generating README:", error);
-    throw new Error("Failed to generate README. Please check the repository URL and try again.");
+    throw new Error("Failed to generate README with Gemini. The model may be overloaded, or there might be an issue with the provided code.");
   }
 };
 
