@@ -6,10 +6,14 @@ import { SparklesIcon } from './icons/SparklesIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
 import { ExportIcon } from './icons/ExportIcon';
 import { SpinnerIcon } from './icons/SpinnerIcon';
+import { InfoIcon } from './icons/InfoIcon';
+import { KeyIcon } from './icons/KeyIcon';
 
 const ReadmeGenerator: React.FC = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [isThinkingMode, setIsThinkingMode] = useState(false);
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
   const [generatedReadme, setGeneratedReadme] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -46,8 +50,7 @@ const ReadmeGenerator: React.FC = () => {
     setSelection(null);
     
     try {
-      setLoadingMessage('Analyzing repository files...');
-      const repoContent = await getRepoContent(repoUrl);
+      const repoContent = await getRepoContent(repoUrl, githubToken, setLoadingMessage);
       
       setLoadingMessage('Generating README with Gemini...');
       const readme = await generateReadme(repoUrl, repoContent, isThinkingMode);
@@ -58,7 +61,7 @@ const ReadmeGenerator: React.FC = () => {
       setIsLoading(false);
       setLoadingMessage('');
     }
-  }, [repoUrl, isThinkingMode]);
+  }, [repoUrl, isThinkingMode, githubToken]);
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(generatedReadme).then(() => {
@@ -191,23 +194,72 @@ const ReadmeGenerator: React.FC = () => {
           </button>
         </div>
         {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
-        <div className="mt-4 flex items-center justify-end">
-          <label htmlFor="thinking-mode" className="flex items-center cursor-pointer">
-            <span className="mr-3 text-sm font-medium text-slate-300">Enable Thinking Mode</span>
-            <div className="relative">
-              <input 
-                type="checkbox" 
-                id="thinking-mode" 
-                className="sr-only" 
-                checked={isThinkingMode}
-                onChange={() => setIsThinkingMode(!isThinkingMode)}
-                disabled={isLoading}
-              />
-              <div className="block bg-slate-600 w-14 h-8 rounded-full"></div>
-              <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isThinkingMode ? 'translate-x-6 bg-sky-400' : ''}`}></div>
-            </div>
-          </label>
+        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <label htmlFor="private-repo" className="flex items-center cursor-pointer">
+              <span className="text-sm font-medium text-slate-300 mr-3">Private Repo</span>
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  id="private-repo" 
+                  className="sr-only" 
+                  checked={showTokenInput}
+                  onChange={() => setShowTokenInput(!showTokenInput)}
+                  disabled={isLoading}
+                />
+                <div className="block bg-slate-600 w-14 h-8 rounded-full"></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${showTokenInput ? 'translate-x-6 bg-sky-400' : ''}`}></div>
+              </div>
+            </label>
+            <label htmlFor="thinking-mode" className="flex items-center cursor-pointer">
+              <div className="flex items-center gap-1.5 mr-3">
+                <span className="text-sm font-medium text-slate-300">Enable Thinking Mode</span>
+                <div className="relative group flex items-center">
+                  <InfoIcon className="h-4 w-4 text-slate-400" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 z-20 mb-2 w-64 p-2 text-xs text-center bg-slate-700 text-slate-200 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible pointer-events-none">
+                    Enables a larger processing budget for Gemini, potentially leading to more in-depth analysis but may take longer.
+                  </div>
+                </div>
+              </div>
+              <div className="relative">
+                <input 
+                  type="checkbox" 
+                  id="thinking-mode" 
+                  className="sr-only" 
+                  checked={isThinkingMode}
+                  onChange={() => setIsThinkingMode(!isThinkingMode)}
+                  disabled={isLoading}
+                />
+                <div className="block bg-slate-600 w-14 h-8 rounded-full"></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isThinkingMode ? 'translate-x-6 bg-sky-400' : ''}`}></div>
+              </div>
+            </label>
         </div>
+        {showTokenInput && (
+          <div className="mt-4 animate-fade-in">
+              <label htmlFor="github-token" className="flex items-center gap-2 mb-2 text-sm font-medium text-slate-300">
+                  GitHub Personal Access Token
+                  <div className="relative group flex items-center">
+                      <InfoIcon className="h-4 w-4 text-slate-400" />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 z-20 mb-2 w-72 p-2 text-xs text-left bg-slate-700 text-slate-200 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 invisible group-hover:visible pointer-events-none">
+                          Provide a PAT to access private repositories. Your token is not stored and is only used for this session. Ensure the token has 'repo' scope.
+                          <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline ml-1">Create one here.</a>
+                      </div>
+                  </div>
+              </label>
+              <div className="relative">
+                  <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <input
+                      type="password"
+                      id="github-token"
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder="ghp_..."
+                      className="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-colors duration-200"
+                      disabled={isLoading}
+                  />
+              </div>
+          </div>
+        )}
       </div>
 
       {/* AI Edit Selection Bar */}
