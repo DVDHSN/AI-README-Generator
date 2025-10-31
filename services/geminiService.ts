@@ -1,4 +1,4 @@
-
+// Fix: Import Chat type for the new getChatInstance function.
 import { GoogleGenAI, Chat } from "@google/genai";
 
 if (!process.env.API_KEY) {
@@ -6,8 +6,6 @@ if (!process.env.API_KEY) {
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-let chatInstance: Chat | null = null;
 
 export const generateReadme = async (repoUrl: string, isThinkingMode: boolean): Promise<string> => {
   const modelName = 'gemini-2.5-pro';
@@ -50,14 +48,41 @@ export const generateReadme = async (repoUrl: string, isThinkingMode: boolean): 
   }
 };
 
-export const getChatInstance = (): Chat => {
-  if (!chatInstance) {
-    chatInstance = ai.chats.create({
-      model: 'gemini-2.5-flash',
-      config: {
-        systemInstruction: 'You are a helpful and friendly AI assistant for a developer tool. Answer questions concisely and clearly.',
-      },
+export const editReadmeSelection = async (selectedText: string, editPrompt: string): Promise<string> => {
+  const modelName = 'gemini-2.5-flash';
+
+  const prompt = `
+    You are an expert technical writer. A user has selected a portion of a README file and wants you to edit it based on their instruction.
+    Rewrite the following text based on the user's instruction.
+    IMPORTANT: Respond ONLY with the rewritten text. Do not include any explanations, introductory phrases, or markdown formatting like backticks unless it was part of the original text.
+
+    USER'S INSTRUCTION:
+    "${editPrompt}"
+
+    ORIGINAL TEXT:
+    ---
+    ${selectedText}
+    ---
+
+    REWRITTEN TEXT:
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
     });
+    return response.text.trim();
+  } catch (error) {
+    console.error("Error editing selection:", error);
+    throw new Error("Failed to edit the selection.");
   }
-  return chatInstance;
+};
+
+// Fix: Export a function to get a chat instance for the ChatBot component.
+export const getChatInstance = (): Chat => {
+  const modelName = 'gemini-2.5-flash';
+  return ai.chats.create({
+    model: modelName,
+  });
 };

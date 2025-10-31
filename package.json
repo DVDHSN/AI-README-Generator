@@ -11,7 +11,10 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.28.0"
+    "@google/genai": "^1.28.0",
+    "jspdf": "^2.5.1",
+    "marked": "^14.0.0",
+    "html-to-docx": "1.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
