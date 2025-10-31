@@ -42,7 +42,7 @@ To get a local copy up and running, follow these simple steps.
 
 -   Node.js (v18 or later)
 -   npm, yarn, or pnpm
--   An OpenAI API key
+-   A Google Gemini API key
 
 ### Steps
 
