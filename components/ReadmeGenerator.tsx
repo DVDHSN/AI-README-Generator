@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { generateReadme, editReadmeSelection } from '../services/geminiService';
 import { getRepoContent } from '../services/githubService';
+import { getZipContent } from '../services/zipService';
 import { GithubIcon } from './icons/GithubIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
@@ -8,9 +9,15 @@ import { ExportIcon } from './icons/ExportIcon';
 import { SpinnerIcon } from './icons/SpinnerIcon';
 import { InfoIcon } from './icons/InfoIcon';
 import { KeyIcon } from './icons/KeyIcon';
+import { UploadIcon } from './icons/UploadIcon';
 
 const ReadmeGenerator: React.FC = () => {
+  const [mode, setMode] = useState<'url' | 'zip'>('url');
   const [repoUrl, setRepoUrl] = useState('');
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isThinkingMode, setIsThinkingMode] = useState(false);
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [githubToken, setGithubToken] = useState('');
@@ -40,20 +47,31 @@ const ReadmeGenerator: React.FC = () => {
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (!repoUrl) {
-      setError('Please enter a GitHub repository URL.');
-      return;
-    }
     setError(null);
     setIsLoading(true);
     setGeneratedReadme('');
     setSelection(null);
-    
+
     try {
-      const repoContent = await getRepoContent(repoUrl, githubToken, setLoadingMessage);
+      let repoContent: string;
+      let context: string;
+
+      if (mode === 'url') {
+        if (!repoUrl) {
+          throw new Error('Please enter a GitHub repository URL.');
+        }
+        context = repoUrl;
+        repoContent = await getRepoContent(repoUrl, githubToken, setLoadingMessage);
+      } else { // mode === 'zip'
+        if (!zipFile) {
+          throw new Error('Please upload a ZIP file of your repository.');
+        }
+        context = `the repository from the file '${zipFile.name}'`;
+        repoContent = await getZipContent(zipFile, setLoadingMessage);
+      }
       
       setLoadingMessage('Generating README with Gemini...');
-      const readme = await generateReadme(repoUrl, repoContent, isThinkingMode);
+      const readme = await generateReadme(context, repoContent, isThinkingMode);
       setGeneratedReadme(readme);
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
@@ -61,7 +79,7 @@ const ReadmeGenerator: React.FC = () => {
       setIsLoading(false);
       setLoadingMessage('');
     }
-  }, [repoUrl, isThinkingMode, githubToken]);
+  }, [repoUrl, githubToken, mode, zipFile, isThinkingMode]);
 
   const handleCopyToClipboard = () => {
     navigator.clipboard.writeText(generatedReadme).then(() => {
@@ -167,49 +185,124 @@ const ReadmeGenerator: React.FC = () => {
     }
   };
 
+  const handleFileChange = (files: FileList | null) => {
+    if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type === 'application/zip' || file.name.endsWith('.zip')) {
+            setZipFile(file);
+            setError(null);
+        } else {
+            setError('Please upload a valid .zip file.');
+        }
+    }
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsDragging(false);
+      handleFileChange(e.dataTransfer.files);
+  };
+
+  const isGenerateDisabled = isLoading || (mode === 'url' && !repoUrl) || (mode === 'zip' && !zipFile);
 
   return (
     <div className="w-full flex flex-col gap-6">
       {/* Input Section */}
       <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <div className="relative flex-grow w-full">
-            <GithubIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <input
-              type="text"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="https://github.com/user/repository"
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-colors duration-200"
-              disabled={isLoading}
-            />
+        <div className="flex border-b border-slate-700 mb-4">
+            <button 
+                onClick={() => setMode('url')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${mode === 'url' ? 'border-b-2 border-sky-400 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+                GitHub URL
+            </button>
+            <button 
+                onClick={() => setMode('zip')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${mode === 'zip' ? 'border-b-2 border-sky-400 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+                Upload ZIP
+            </button>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 items-start">
+          <div className="flex-grow w-full">
+            {mode === 'url' ? (
+                <div className="relative animate-fade-in">
+                    <GithubIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                    <input
+                        type="text"
+                        value={repoUrl}
+                        onChange={(e) => setRepoUrl(e.target.value)}
+                        placeholder="https://github.com/user/repository"
+                        className="w-full bg-slate-900 border border-slate-600 rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-colors duration-200"
+                        disabled={isLoading}
+                    />
+                </div>
+            ) : (
+                <div 
+                    className={`relative w-full border-2 border-dashed border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-sky-500 transition-colors animate-fade-in ${isDragging ? 'bg-slate-700/50 border-sky-500' : ''}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={(e) => handleFileChange(e.target.files)}
+                        accept=".zip,application/zip"
+                        className="hidden" 
+                        disabled={isLoading}
+                    />
+                    <div className="flex flex-col items-center justify-center text-slate-400">
+                        <UploadIcon className="h-8 w-8 mb-2" />
+                        {zipFile ? (
+                            <p>Selected: <span className="font-semibold text-sky-400">{zipFile.name}</span></p>
+                        ) : (
+                            <p>Drag & drop a .zip file here, or click to select</p>
+                        )}
+                        <p className="text-xs mt-1">Your code stays in your browser</p>
+                    </div>
+                </div>
+            )}
+            {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
           </div>
+
           <button
             onClick={handleGenerate}
-            disabled={isLoading}
+            disabled={isGenerateDisabled}
             className="w-full md:w-auto flex items-center justify-center gap-2 bg-sky-600 text-white font-semibold px-6 py-3 rounded-lg hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105"
           >
             {isLoading ? <SpinnerIcon className="h-5 w-5" /> : <SparklesIcon className="h-5 w-5" />}
             <span>{isLoading ? 'Generating...' : 'Generate README'}</span>
           </button>
         </div>
-        {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
+
         <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <label htmlFor="private-repo" className="flex items-center cursor-pointer">
-              <span className="text-sm font-medium text-slate-300 mr-3">Private Repo</span>
-              <div className="relative">
-                <input 
-                  type="checkbox" 
-                  id="private-repo" 
-                  className="sr-only" 
-                  checked={showTokenInput}
-                  onChange={() => setShowTokenInput(!showTokenInput)}
-                  disabled={isLoading}
-                />
-                <div className="block bg-slate-600 w-14 h-8 rounded-full"></div>
-                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${showTokenInput ? 'translate-x-6 bg-sky-400' : ''}`}></div>
-              </div>
-            </label>
+            {mode === 'url' ? (
+                <label htmlFor="private-repo" className="flex items-center cursor-pointer">
+                <span className="text-sm font-medium text-slate-300 mr-3">Private Repo</span>
+                <div className="relative">
+                    <input 
+                    type="checkbox" 
+                    id="private-repo" 
+                    className="sr-only" 
+                    checked={showTokenInput}
+                    onChange={() => setShowTokenInput(!showTokenInput)}
+                    disabled={isLoading}
+                    />
+                    <div className="block bg-slate-600 w-14 h-8 rounded-full"></div>
+                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${showTokenInput ? 'translate-x-6 bg-sky-400' : ''}`}></div>
+                </div>
+                </label>
+            ) : <div />}
             <label htmlFor="thinking-mode" className="flex items-center cursor-pointer">
               <div className="flex items-center gap-1.5 mr-3">
                 <span className="text-sm font-medium text-slate-300">Enable Thinking Mode</span>
@@ -234,7 +327,7 @@ const ReadmeGenerator: React.FC = () => {
               </div>
             </label>
         </div>
-        {showTokenInput && (
+        {showTokenInput && mode === 'url' && (
           <div className="mt-4 animate-fade-in">
               <label htmlFor="github-token" className="flex items-center gap-2 mb-2 text-sm font-medium text-slate-300">
                   GitHub Personal Access Token

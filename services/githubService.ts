@@ -1,38 +1,5 @@
-const RELEVANT_EXTENSIONS = new Set([
-  // Source code
-  'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'go', 'rs', 'cs', 'php', 'rb', 'swift', 'kt', 'kts',
-  'c', 'cpp', 'h', 'hpp', 'm', 'mm',
-  // Web
-  'html', 'css', 'scss', 'less', 'vue', 'svelte',
-  // Config
-  'json', 'yaml', 'yml', 'toml', 'xml', 'env', 'ini', 'cfg',
-  // Scripts
-  'sh', 'bash', 'ps1',
-  // Docs
-  'md', 'mdx', 'txt',
-  // Data
-  'sql',
-  // Other
-  'dockerfile', 'gitignore',
-]);
+import { isFileRelevant, createGitignoreFilter } from './fileFilterService';
 
-const RELEVANT_FILENAMES = new Set([
-  'package.json', 'composer.json', 'pom.xml', 'build.gradle', 'requirements.txt', 'gemfile',
-  'dockerfile', 'docker-compose.yml', 'vite.config.js', 'vite.config.ts', 'webpack.config.js',
-  'tailwind.config.js', 'next.config.js', 'remix.config.js', 'tsconfig.json', 'pyproject.toml',
-  'cargo.toml', 'go.mod', 'readme.md',
-]);
-
-const EXCLUDED_DIRECTORIES = new Set([
-  'node_modules', 'vendor', 'dist', 'build', 'target', '.git', '.vscode', '.idea',
-  '__pycache__', 'env', 'venv', 'public', 'assets',
-]);
-
-const EXCLUDED_FILENAMES = new Set([
-  'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock',
-]);
-
-const MAX_FILE_SIZE = 100 * 1024; // 100KB
 const MAX_TOTAL_CONTENT_SIZE = 1.5 * 1024 * 1024; // 1.5MB to stay safely within context limits
 
 const parseRepoUrl = (url: string): { owner: string; repo: string } | null => {
@@ -46,21 +13,6 @@ const parseRepoUrl = (url: string): { owner: string; repo: string } | null => {
   } catch (e) {
     return null;
   }
-};
-
-const createGitignoreFilter = (content: string): ((path: string) => boolean) => {
-    // A simplified gitignore parser. Handles full directory/file names found in path segments.
-    // Does not handle complex wildcards or negation for simplicity.
-    const rules = content.split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'))
-        .map(rule => rule.endsWith('/') ? rule.slice(0, -1) : rule)
-        .filter(Boolean);
-
-    return (path: string): boolean => {
-        const segments = path.split('/');
-        return segments.some(segment => rules.includes(segment));
-    };
 };
 
 const handleFetchError = (res: Response, context: string): void => {
@@ -135,27 +87,9 @@ export const getRepoContent = async (
   // 3. Filter files
   onProgress?.('Step 3/5: Identifying relevant files...');
   const filesToFetch = treeData.tree
-    .filter((file: any) => {
-      if (file.type !== 'blob' || file.size > MAX_FILE_SIZE || file.size === 0) {
-        return false;
-      }
-      
-      // Rule 1: Apply .gitignore rules if parsed
-      if (isPathIgnored(file.path)) {
-        return false;
-      }
-
-      const pathParts = file.path.split('/');
-      const filename = pathParts[pathParts.length - 1];
-      
-      // Rule 2: Apply hardcoded excludes
-      if (EXCLUDED_FILENAMES.has(filename)) return false;
-      if (!gitignoreParsed && pathParts.some(part => EXCLUDED_DIRECTORIES.has(part))) return false;
-
-      // Rule 3: Keep only relevant files based on name/extension
-      const extension = filename.split('.').pop()?.toLowerCase() ?? '';
-      return RELEVANT_FILENAMES.has(filename) || RELEVANT_EXTENSIONS.has(extension);
-    });
+    .filter((file: any) => 
+        file.type === 'blob' && isFileRelevant(file.path, file.size, isPathIgnored, gitignoreParsed)
+    );
   
   // 4. Fetch file contents in parallel
   onProgress?.(`Step 4/5: Fetching content of ${filesToFetch.length} files...`);

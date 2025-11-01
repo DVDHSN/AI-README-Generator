@@ -8,7 +8,7 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const generateReadme = async (repoUrl: string, repoContent: string, isThinkingMode: boolean): Promise<string> => {
+export const generateReadme = async (context: string, repoContent: string, isThinkingMode: boolean): Promise<string> => {
   const modelName = 'gemini-2.5-pro';
   
   const prompt = `
@@ -28,7 +28,7 @@ export const generateReadme = async (repoUrl: string, repoContent: string, isThi
     - **Contributing**: Standard guidelines for potential contributors.
     - **License**: A mention of the project's license (e.g., MIT). Look for a LICENSE file if its content is provided.
     
-    The user provided this URL for context: ${repoUrl}
+    The user provided this context for the repository: ${context}
     
     Here are the contents of the most relevant repository files:
     ---
